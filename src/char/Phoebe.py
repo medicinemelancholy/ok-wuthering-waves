@@ -189,7 +189,7 @@ class Phoebe(BaseChar):
                 amplitude = n[i]
                 frequncy = i
             i+=1
-        return (min_freq <= i <= max_freq) or amplitude >= min_amp
+        return (min_freq <= frequncy <= max_freq) or amplitude >= min_amp
         
     def calculate_forte_num(self, forte_color, box, num = 1, min_freq = 39, max_freq = 41, min_amp = 50):
         cropped = box.crop_frame(self.task.frame)
