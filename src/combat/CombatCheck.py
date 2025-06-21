@@ -33,6 +33,7 @@ class CombatCheck(BaseWWTask):
         self.target_enemy_time_out = 3
         self.combat_end_condition = None
         self._in_illusive = False
+        self.has_lavitator = False
 
     @property
     def in_liberation(self):
@@ -76,6 +77,7 @@ class CombatCheck(BaseWWTask):
         self.boss_health_box = None
         self.last_in_realm_not_combat = 0
         self._in_illusive = False
+        self.has_lavitator = False
         return False
 
     def recent_liberation(self):
@@ -149,21 +151,37 @@ class CombatCheck(BaseWWTask):
                     return False
                 logger.info(
                     f'enter combat cost {(time.time() - start):2f} boss_lv_template:{self.boss_lv_template is not None} boss_health_box:{self.boss_health_box} has_count_down:{self.has_count_down}')
+                self.has_lavitator = self.ensure_leviator()
                 self._in_combat = True
-                self.ensure_leviator()
                 return True
 
     def ensure_leviator(self):
-        if self.find_one('edge_levitator', threshold=0.6):
+        if levi := self.find_one('edge_levitator', threshold=0.6):
+            self.log_debug('edge levitator found {}'.format(levi))
             return True
         if self.has_char(Roccia):
             if self.find_one('levitator_roccia', threshold=0.6):
                 return True
-        self.send_key_down('tab')
-        self.sleep(0.2)
-        levitator = self.wait_feature('wheel_levitator', threshold=0.6, box=self.box_of_screen(0.27, 0.16, 0.68, 0.76))
+        from src.task.AutoCombatTask import AutoCombatTask
+        from src.task.TacetTask import TacetTask
+        from src.task.DailyTask import DailyTask
+        if isinstance(self, AutoCombatTask):
+            if not self.in_realm():
+                return False
+        elif isinstance(self, (TacetTask, DailyTask)):
+            return False
+        start = time.time()
+        while time.time() - start < 1 and self.in_team()[0]:
+            self.send_key_down('tab')
+            self.sleep(0.3)
+        if self.in_team()[0]:
+            self.log_info('can not open wheel')
+            self.send_key_up('tab')
+            return False
+        levitator = self.wait_feature('wheel_levitator', threshold=0.65, box=self.box_of_screen(0.27, 0.16, 0.68, 0.76))
         self.sleep(0.1)
         if not levitator:
+            self.send_key_up('tab')
             raise Exception('no levitator tool in the tab wheel!')
         old = win32api.GetCursorPos()
         self.move(levitator.x, levitator.y)
@@ -177,7 +195,6 @@ class CombatCheck(BaseWWTask):
             if self.has_char(Roccia):
                 if self.find_one('levitator_roccia', threshold=0.6):
                     return True
-            raise Exception('Can not switch to levitator please ensure you have equipped echos!')
         self.log_debug(f'ensuring leviator succees {levitator}')
 
     def log_time(self, start, name):

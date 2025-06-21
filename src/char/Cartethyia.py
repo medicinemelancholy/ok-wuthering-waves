@@ -7,6 +7,16 @@ class Cartethyia(BaseChar):
         self.is_cartethyia = True
         self.buffs = {'sword1': None, 'sword2': None, 'sword3': None}
         super().__init__(*args, **kwargs)
+        self.init_template()
+
+    def init_template(self):
+        template = self.task.get_feature_by_name('forte_cartethyia_sword3')
+        original_mat = template.mat
+        h = original_mat.shape[0]
+        self.sword3_half_mat = original_mat[:int(h * 0.5)]
+        target_box = self.task.get_box_by_name('forte_cartethyia_sword3')
+        target_box.height = (target_box.height + 1) // 2
+        self.sword3_half_box = target_box
 
     def on_combat_end(self, chars):
         if not self.is_cartethyia:
@@ -29,8 +39,11 @@ class Cartethyia(BaseChar):
     def do_perform(self):
         if self.has_intro:
             self.continues_normal_attack(1.4)   
+        else:
+            self.click_echo(time_out=0.2)
         if self.is_small():
             self.logger.info(f'is cartethyia')
+            self.wait_down()
             if self.acquire_missing_buffs():
                 return self.switch_next_char()
             self.try_mid_air_attack()
@@ -101,7 +114,7 @@ class Cartethyia(BaseChar):
             self.logger.debug(f'cartethyia_space mean {mean_val} contrast {contrast_val}')
             return mean_val > 190 and contrast_val > 60
     
-    def try_mid_air_attack(self, timeout=1):
+    def try_mid_air_attack(self, timeout=2):
         self.get_sword_buffs()
         if self.liberation_available() or all(self.buffs.values()):
             pass
@@ -109,7 +122,6 @@ class Cartethyia(BaseChar):
             return
         if self.is_mid_air_attack_available():
             self.logger.info('perform mid-air attack')
-            is_first_attempt = True
             start = time.time()
             while True:
                 self.task.send_key('SPACE', interval=0.1)
@@ -119,15 +131,12 @@ class Cartethyia(BaseChar):
                 if not self.is_mid_air_attack_available():
                     self.sleep(0.5)
                     break
-                if is_first_attempt and self.current_tool() < 0.1:
-                    is_first_attempt = False
-                    self.task.wait_until(lambda: self.current_tool() > 0.1, time_out=0.6)
-                    start = time.time()
                 if time.time() - start > timeout:
                     break
     
     def is_small(self):
-        self.is_cartethyia = bool(self.task.find_one('forte_cartethyia_space'))
+        self.is_cartethyia = bool(self.task.find_one(template=self.sword3_half_mat,
+                                                     box=self.sword3_half_box, threshold=0.5))
         return self.is_cartethyia
     
     def do_get_switch_priority(self, current_char: BaseChar, has_intro=False, target_low_con=False):
@@ -173,12 +182,14 @@ class Cartethyia(BaseChar):
                     is_first_attempt = False
                     self.task.wait_until(lambda: self.current_tool() > 0.1, time_out=0.6)
                     start = time.time()
-                self.task.click(interval=0.1, after_sleep=0.01)
+                self.click(interval=0.1, after_sleep=0.01)
+                self.check_combat()
                 self.task.next_frame()
             self.logger.debug(f'sword2: click duration {time.time() - start}')
         res = False
         if not self.buffs.get('sword3'):
             res = self.click_resonance()[0]
+            self.check_combat()
         if self.liberation_available():
             res and self.sleep(0.2)
         elif has_perform_action:
@@ -191,9 +202,8 @@ class Cartethyia(BaseChar):
             while time.time() - start < 1.5:
                 if self.task.find_one('forte_cartethyia_sword1', threshold=0.9):
                     break
-                if time.time() - start > 0.5 and self.current_tool() < 0.1:
-                    break
                 self.task.next_frame()
             self.task.mouse_up()
+            self.check_combat()
             self.logger.debug(f'sword1: heavy_att duration {time.time() - start}')
         return not self.liberation_available()
