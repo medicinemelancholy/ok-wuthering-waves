@@ -124,10 +124,12 @@ class CombatCheck(BaseWWTask):
 
     def in_combat(self):
         if self.in_liberation or self.recent_liberation():
-            return True
+            return True       
         if self._in_combat:
             now = time.time()
             if now - self.last_combat_check > self.combat_check_interval:
+                if self.break_ice():
+                    return True
                 if current_char := self.get_current_char():
                     if current_char.skip_combat_check():
                         return True
@@ -163,7 +165,29 @@ class CombatCheck(BaseWWTask):
                 self._in_combat = True
                 self.load_chars()
                 return True
-
+                
+    def check_frozen(self):
+        texts = self.ocr(box=self.box_of_screen(0.44, 0.23, 0.56, 0.27, hcenter=True),
+                         target_height=540, name='frozen_hint')
+        fps_text = find_boxes_by_name(texts,
+                                      re.compile(r'交替点击进行挣脱', re.IGNORECASE))
+        if fps_text:
+            return True 
+            
+    def break_ice(self):
+        if self.check_frozen():
+            self.log_info('find frozen')
+            start = time.time()
+            click = True
+            while time.time() - start < 5:
+                click and self.send_key('a')
+                click or self.send_key('d')
+                click = not click
+                if not self.check_frozen():
+                    break
+            return True
+        return False
+                    
     def ensure_leviator(self):
         if levi := self.find_one('edge_levitator', threshold=0.6):
             self.log_debug('edge levitator found {}'.format(levi))
